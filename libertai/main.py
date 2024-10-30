@@ -1,11 +1,7 @@
 import typer
 
-app = typer.Typer()
+from libertai.commands import agent
 
+app = typer.Typer(help="Simple CLI to interact with LibertAI products")
 
-@app.command()
-def hello_world():
-    """
-    Says hello
-    """
-    typer.echo("Hello World!")
+app.add_typer(agent.app)
