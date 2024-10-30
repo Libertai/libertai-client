@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "libertai"
+version = "0.0.1"
+description = ""
+authors = ["LibertAI.io team <hello@libertai.io>"]
+readme = "README.md"
+homepage = "https://libertai.io"
+repository = "https://github.com/LibertAI/libertai-client"
+documentation = "https://docs.libertai.io"
+classifiers = [
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Development Status :: 2 - Pre-Alpha",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[tool.poetry.scripts]
+libertai = "libertai.main:app"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = "^0.12.5"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.11.1"
+ruff = "^0.6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
