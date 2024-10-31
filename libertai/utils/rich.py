@@ -2,6 +2,8 @@ from rich.progress import ProgressColumn, Task
 from rich.style import Style
 from rich.text import Text
 
+TEXT_PROGRESS_FORMAT = "[progress.description]{task.description}"
+
 
 class TaskOfTotalColumn(ProgressColumn):
     def __init__(self, total: int):

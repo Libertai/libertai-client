@@ -1,15 +1,22 @@
-import os
+import json
 from typing import Annotated
 
 import typer
 from docker import client  # type: ignore
 from docker.models.containers import Container  # type: ignore
+from dotenv import dotenv_values
+from rich.console import Console
 from rich.progress import Progress, TextColumn, SpinnerColumn, TimeElapsedColumn
 
-from libertai.interfaces.agent import DockerCommand
-from libertai.utils.rich import TaskOfTotalColumn
+from libertai.config import config
+from libertai.interfaces.agent import DockerCommand, UpdateAgentResponse
+from libertai.utils.agent import parse_agent_config_env
+from libertai.utils.rich import TaskOfTotalColumn, TEXT_PROGRESS_FORMAT
+from libertai.utils.system import get_full_path
 
 app = typer.Typer(name="agent", help="Deploy and manage agents")
+
+err_console = Console(stderr=True)
 
 
 @app.command()
@@ -20,34 +27,80 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
     Deploy or redeploy an agent
     """
 
-    commands: list[DockerCommand] = [DockerCommand(title="Updating system packages", content="apt-get update"),
-                                     DockerCommand(title="Installing system dependencies",
-                                                   content="apt-get install python3-pip squashfs-tools curl jq -y"),
-                                     DockerCommand(title="Installing agent packages",
-                                                   content="pip install -t /opt/packages -r /opt/requirements.txt"),
-                                     DockerCommand(title="Generating agent packages archive",
-                                                   content="mksquashfs /opt/packages /opt/packages.squashfs -noappend"),
-                                     DockerCommand(title="Generating agent code archive",
-                                                   content="mksquashfs /opt/code /opt/code.squashfs -noappend")]
+    try:
+        requirements_path = get_full_path(path, "requirements.txt")
+        libertai_env_path = get_full_path(path, ".env.libertai")
+        code_path = get_full_path(code_path)
+    except FileNotFoundError as error:
+        err_console.print(f"[red]{error}")
+        raise typer.Exit(1)
 
-    docker_client = client.from_env()
-    container: Container = docker_client.containers.run("debian:bookworm", platform="linux/amd64", tty=True,
-                                                        detach=True, volumes={
-            os.path.abspath(f'{path}/requirements.txt'): {'bind': '/opt/requirements.txt', 'mode': 'ro'},
-            os.path.abspath(f'{code_path}'): {'bind': '/opt/code', 'mode': 'ro'}
-        })
+    try:
+        libertai_config = parse_agent_config_env(dotenv_values(libertai_env_path))
+    except EnvironmentError as error:
+        err_console.print(f"[red]{error}")
+        raise typer.Exit(1)
 
-    with Progress(TaskOfTotalColumn(len(commands)), TextColumn("[progress.description]{task.description}"),
+    commands: list[DockerCommand] = [
+        DockerCommand(title="Updating system packages", content="apt-get update"),
+        DockerCommand(title="Installing system dependencies",
+                      content="apt-get install python3-pip squashfs-tools curl jq -y"),
+        DockerCommand(title="Installing agent packages",
+                      content="pip install -t /opt/packages -r /opt/requirements.txt"),
+        DockerCommand(title="Generating agent packages archive",
+                      content="mksquashfs /opt/packages /opt/packages.squashfs -noappend"),
+        DockerCommand(title="Generating agent code archive",
+                      content="mksquashfs /opt/code /opt/code.squashfs -noappend"),
+        DockerCommand(title="Uploading to Aleph and creating the agent VM",
+                      content=f"""curl --no-progress-meter --fail-with-body -X 'PUT' \
+                                    '{config.AGENTS_BACKEND_URL}/agent' \
+                                    -H 'accept: application/json' \
+                                    -H 'Content-Type: multipart/form-data' \
+                                    -F 'agent_id="{libertai_config.id}"' \
+                                    -F 'secret="{libertai_config.secret}"' \
+                                    -F code=@/opt/code.squashfs \
+                                    -F packages=@/opt/packages.squashfs \
+                                    2>/dev/null;
+                                    """)
+    ]
+
+    # Setup
+    with Progress(TextColumn(TEXT_PROGRESS_FORMAT),
+                  SpinnerColumn(finished_text="✔ ")) as progress:
+        setup_task_text = "Starting Docker container"
+        task = progress.add_task(f"{setup_task_text}", start=True, total=1)
+        docker_client = client.from_env()
+        container: Container = docker_client.containers.run("debian:bookworm", platform="linux/amd64", tty=True,
+                                                            detach=True, volumes={
+                requirements_path: {'bind': '/opt/requirements.txt', 'mode': 'ro'},
+                code_path: {'bind': '/opt/code', 'mode': 'ro'}
+            })
+        progress.update(task, description=f"[green]{setup_task_text}", advance=1)
+
+    agent_result: str | None = None
+    error_message: str | None = None
+
+    with Progress(TaskOfTotalColumn(len(commands)), TextColumn(TEXT_PROGRESS_FORMAT),
                   SpinnerColumn(finished_text="✔ "),
                   TimeElapsedColumn()) as progress:
         for command in commands:
             task = progress.add_task(f"{command.title}", start=True, total=1)
-            container.exec_run(f'/bin/bash -c "{command.content}"')
+            result = container.exec_run(f'/bin/bash -c "{command.content}"')
+
+            if result.exit_code != 0:
+                error_message = f"\n[red]Docker command error: '{result.output.decode().strip('\n')}'"
+                break
+
+            if command.title == "Uploading to Aleph and creating the agent VM":
+                agent_result = result.output.decode()
             progress.update(task, description=f"[green]{command.title}", advance=1)
             progress.stop_task(task)
 
+    if error_message is not None:
+        err_console.print(error_message)
+
     # Cleanup
-    with Progress(TextColumn("[progress.description]{task.description}"),
+    with Progress(TextColumn(TEXT_PROGRESS_FORMAT),
                   SpinnerColumn(finished_text="✔ ")) as progress:
         stop_task_text = "Stopping and removing container"
         task = progress.add_task(f"{stop_task_text}", start=True, total=1)
@@ -55,24 +108,6 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
         container.remove()
         progress.update(task, description=f"[green]{stop_task_text}", advance=1)
 
-# docker run --rm -t --platform linux/amd64 \
-#   -v ./requirements.txt:/opt/requirements.txt:ro \
-#   -v $CODE_PATH:/opt/code:ro \
-#   debian:bookworm /bin/bash \
-#   -c "
-#   apt-get update;
-#   apt-get install python3-pip squashfs-tools curl jq -y;
-#
-#   pip install -t /opt/packages -r /opt/requirements.txt;
-#
-#   mksquashfs /opt/packages /opt/packages.squashfs -noappend;
-#   mksquashfs /opt/code /opt/code.squashfs -noappend;
-#
-#   vm_hash=\$(curl -X 'POST' \
-#   'https://98c3-58-142-26-96.ngrok-free.app/test' \
-#   -H 'accept: application/json' \
-#   -H 'Content-Type: multipart/form-data' \
-#   -F code=@/opt/code.squashfs \
-#   -F packages=@/opt/packages.squashfs | jq -r '.vm_hash');
-#
-#   echo \"Deployed on https://aleph-crn.rezar.fr/vm/\${vm_hash}\";"
+    if agent_result is not None:
+        agent_data = UpdateAgentResponse(**json.loads(agent_result))
+        print(f"Agent successfully deployed on https://aleph.sh/vm/{agent_data.vm_hash}")
