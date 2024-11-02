@@ -44,6 +44,7 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
     commands: list[DockerCommand] = [
         DockerCommand(title="Updating system packages", content="apt-get update"),
         DockerCommand(title="Installing system dependencies",
+                      # TODO: make sure we are using the right version of python in docker, and maybe use a venv for safety
                       content="apt-get install python3-pip squashfs-tools curl jq -y"),
         DockerCommand(title="Installing agent packages",
                       content="pip install -t /opt/packages -r /opt/requirements.txt"),
