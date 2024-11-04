@@ -54,10 +54,9 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
                       content="mksquashfs /opt/code /opt/code.squashfs -noappend"),
         DockerCommand(title="Uploading to Aleph and creating the agent VM",
                       content=f"""curl --no-progress-meter --fail-with-body -X 'PUT' \
-                                    '{config.AGENTS_BACKEND_URL}/agent' \
+                                    '{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}' \
                                     -H 'accept: application/json' \
                                     -H 'Content-Type: multipart/form-data' \
-                                    -F 'agent_id="{libertai_config.id}"' \
                                     -F 'secret="{libertai_config.secret}"' \
                                     -F code=@/opt/code.squashfs \
                                     -F packages=@/opt/packages.squashfs \
