@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 [tool.poetry.scripts]
-libertai = "libertai.main:app"
+libertai = "libertai_client.main:app"
 
 [tool.poetry.dependencies]
 python = "^3.11"
