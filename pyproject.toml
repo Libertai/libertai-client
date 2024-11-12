@@ -21,8 +21,9 @@ libertai = "libertai_client.main:app"
 python = "^3.11"
 typer = "^0.12.5"
 docker = "^7.1.0"
-pydantic = "^2.9.2"
+pydantic = ">=1.10.5,<2.0.0"
 python-dotenv = "^1.0.1"
+libertai-utils = "^0.0.7"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"

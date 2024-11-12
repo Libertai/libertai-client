@@ -5,12 +5,13 @@ import typer
 from docker import client  # type: ignore
 from docker.models.containers import Container  # type: ignore
 from dotenv import dotenv_values
+from libertai_utils.aleph.program import get_vm_url
 from rich.console import Console
 from rich.progress import Progress, TextColumn, SpinnerColumn, TimeElapsedColumn
 
 from libertai_client.config import config
 from libertai_client.interfaces.agent import DockerCommand, UpdateAgentResponse
-from libertai_client.utils.agent import parse_agent_config_env, get_vm_host_url
+from libertai_client.utils.agent import parse_agent_config_env
 from libertai_client.utils.rich import TaskOfTotalColumn, TEXT_PROGRESS_FORMAT
 from libertai_client.utils.system import get_full_path
 
@@ -92,6 +93,7 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
                 error_message = f"\n[red]Docker command error: '{command_output}'"
                 break
 
+            # TODO: add IDs to command and use it here instead of the text
             if command.title == "Uploading to Aleph and creating the agent VM":
                 agent_result = result.output.decode()
             progress.update(task, description=f"[green]{command.title}", advance=1)
@@ -111,4 +113,4 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
 
     if agent_result is not None:
         agent_data = UpdateAgentResponse(**json.loads(agent_result))
-        print(f"Agent successfully deployed on {get_vm_host_url(agent_data.vm_hash)}")
+        print(f"Agent successfully deployed on {get_vm_url(agent_data.vm_hash)}")
