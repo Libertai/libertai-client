@@ -1,6 +1,6 @@
 import typer
 
-from libertai.commands import agent
+from libertai_client.commands import agent
 
 app = typer.Typer(help="Simple CLI to interact with LibertAI products")
 

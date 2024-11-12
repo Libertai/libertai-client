@@ -1,4 +1,4 @@
-from libertai.interfaces.agent import AgentConfig
+from libertai_client.interfaces.agent import AgentConfig
 
 
 def parse_agent_config_env(env: dict[str, str | None]) -> AgentConfig:

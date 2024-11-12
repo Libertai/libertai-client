@@ -8,11 +8,11 @@ from dotenv import dotenv_values
 from rich.console import Console
 from rich.progress import Progress, TextColumn, SpinnerColumn, TimeElapsedColumn
 
-from libertai.config import config
-from libertai.interfaces.agent import DockerCommand, UpdateAgentResponse
-from libertai.utils.agent import parse_agent_config_env
-from libertai.utils.rich import TaskOfTotalColumn, TEXT_PROGRESS_FORMAT
-from libertai.utils.system import get_full_path
+from libertai_client.config import config
+from libertai_client.interfaces.agent import DockerCommand, UpdateAgentResponse
+from libertai_client.utils.agent import parse_agent_config_env
+from libertai_client.utils.rich import TaskOfTotalColumn, TEXT_PROGRESS_FORMAT
+from libertai_client.utils.system import get_full_path
 
 app = typer.Typer(name="agent", help="Deploy and manage agents")
 
