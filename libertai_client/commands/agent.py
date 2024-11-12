@@ -22,7 +22,7 @@ err_console = Console(stderr=True)
 @app.command()
 def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repository", prompt=True)] = ".",
            code_path: Annotated[
-               str, typer.Option(help="Path to the package that contains the code", prompt=True)] = "./test"):
+               str, typer.Option(help="Path to the package that contains the code", prompt=True)] = "./src"):
     """
     Deploy or redeploy an agent
     """
@@ -88,7 +88,8 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
             result = container.exec_run(f'/bin/bash -c "{command.content}"')
 
             if result.exit_code != 0:
-                error_message = f"\n[red]Docker command error: '{result.output.decode().strip('\n')}'"
+                command_output = result.output.decode().strip('\n')
+                error_message = f"\n[red]Docker command error: '{command_output}'"
                 break
 
             if command.title == "Uploading to Aleph and creating the agent VM":
