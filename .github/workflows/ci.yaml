@@ -22,7 +22,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-check
           target: libertai
-          execute_command: 'poetry run mypy'
+          execute_command: 'poetry run mypy libertai_client'
 
   ruff:
     name: ruff
