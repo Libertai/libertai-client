@@ -36,6 +36,16 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
 
+    env_values: dict[str, str | None] = {}
+    try:
+        env_path = get_full_path(path, ".env")
+        env_values = dict(dotenv_values(env_path))
+    except FileNotFoundError:
+        pass
+
+    # Double dumps to escape the double quotes for when the command is passed in /bin/bash -c "command"
+    encoded_env_values = json.dumps(json.dumps(env_values))[1:-1]
+
     try:
         libertai_config = parse_agent_config_env(dotenv_values(libertai_env_path))
     except EnvironmentError as error:
@@ -43,22 +53,23 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
         raise typer.Exit(1)
 
     commands: list[DockerCommand] = [
-        DockerCommand(title="Updating system packages", content="apt-get update"),
-        DockerCommand(title="Installing system dependencies",
+        DockerCommand(id="update-system", title="Updating system packages", content="apt-get update"),
+        DockerCommand(id="install-deps", title="Installing system dependencies",
                       # TODO: make sure we are using the right version of python in docker, and maybe use a venv for safety
                       content="apt-get install python3-pip squashfs-tools curl -y"),
-        DockerCommand(title="Installing agent packages",
+        DockerCommand(id="install-packages", title="Installing agent packages",
                       content="pip install -t /opt/packages -r /opt/requirements.txt"),
-        DockerCommand(title="Generating agent packages archive",
+        DockerCommand(id="archive-packages", title="Generating agent packages archive",
                       content="mksquashfs /opt/packages /opt/packages.squashfs -noappend"),
-        DockerCommand(title="Generating agent code archive",
+        DockerCommand(id="archive-code", title="Generating agent code archive",
                       content="mksquashfs /opt/code /opt/code.squashfs -noappend"),
-        DockerCommand(title="Uploading to Aleph and creating the agent VM",
+        DockerCommand(id="call-backend", title="Uploading to Aleph and creating the agent VM",
                       content=f"""curl --no-progress-meter --fail-with-body -X 'PUT' \
                                     '{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}' \
                                     -H 'accept: application/json' \
                                     -H 'Content-Type: multipart/form-data' \
                                     -F 'secret="{libertai_config.secret}"' \
+                                    -F 'env_variables={encoded_env_values}' \
                                     -F code=@/opt/code.squashfs \
                                     -F packages=@/opt/packages.squashfs \
                                     2>/dev/null;
@@ -93,8 +104,7 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
                 error_message = f"\n[red]Docker command error: '{command_output}'"
                 break
 
-            # TODO: add IDs to command and use it here instead of the text
-            if command.title == "Uploading to Aleph and creating the agent VM":
+            if command.id == "call-backend":
                 agent_result = result.output.decode()
             progress.update(task, description=f"[green]{command.title}", advance=1)
             progress.stop_task(task)
@@ -114,3 +124,5 @@ def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repo
     if agent_result is not None:
         agent_data = UpdateAgentResponse(**json.loads(agent_result))
         print(f"Agent successfully deployed on {get_vm_url(agent_data.vm_hash)}")
+    else:
+        typer.Exit(1)

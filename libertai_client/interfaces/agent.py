@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 
 class DockerCommand(BaseModel):
+    id: str
     title: str
     content: str
 
