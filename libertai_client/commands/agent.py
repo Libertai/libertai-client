@@ -1,5 +1,6 @@
 import os
 import zipfile
+from enum import Enum
 from typing import Annotated
 
 import aiohttp
@@ -23,27 +24,51 @@ AGENT_ZIP_WHITELIST = [".env"]
 
 def create_agent_zip(src_dir: str, zip_name: str):
     # Read and parse the .gitignore file
-    with open(get_full_path(src_dir, ".gitignore"), 'r') as gitignore_file:
+    with open(get_full_path(src_dir, ".gitignore"), "r") as gitignore_file:
         gitignore_patterns = gitignore_file.read()
-    spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore_patterns.splitlines() + AGENT_ZIP_BLACKLIST)
+    spec = pathspec.PathSpec.from_lines(
+        "gitwildmatch", gitignore_patterns.splitlines() + AGENT_ZIP_BLACKLIST
+    )
 
-    with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(src_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, src_dir)
 
                 # Check if the file matches any .gitignore pattern
-                if not spec.match_file(relative_path) or relative_path in AGENT_ZIP_WHITELIST:
+                if (
+                    not spec.match_file(relative_path)
+                    or relative_path in AGENT_ZIP_WHITELIST
+                ):
                     zipf.write(file_path, arcname=relative_path)
 
 
+class AgentPythonPackageManager(str, Enum):
+    poetry = "poetry"
+    pip = "pip"
+
+
 @app.command()
-async def deploy(path: Annotated[str, typer.Option(help="Path to the root of your repository", prompt=True)] = ".",
-                 python_version: Annotated[str, typer.Option(help="Version to deploy with", prompt=True)] = "3.11"):
+async def deploy(
+    path: Annotated[
+        str, typer.Option(help="Path to the root of your repository", prompt=True)
+    ] = ".",
+    python_version: Annotated[
+        str, typer.Option(help="Version to deploy with", prompt=True)
+    ] = "3.11",
+    package_manager: Annotated[
+        AgentPythonPackageManager, typer.Option(case_sensitive=False, prompt=True)
+    ] = AgentPythonPackageManager.pip.value,  # type: ignore
+):
     """
     Deploy or redeploy an agent
     """
+
+    # TODO: try to detect package manager, show detected value and ask user for the confirmation or change
+    # Same for python version
+
+    # TODO: allow user to give a custom deployment script URL
 
     try:
         libertai_env_path = get_full_path(path, ".env.libertai")
@@ -52,25 +77,29 @@ async def deploy(path: Annotated[str, typer.Option(help="Path to the root of you
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
 
-    create_agent_zip(path, "/tmp/libertai-agent.zip")
+    agent_zip_path = "/tmp/libertai-agent.zip"
+
+    create_agent_zip(path, agent_zip_path)
 
     data = aiohttp.FormData()
-    data.add_field('secret', libertai_config.secret)
-    data.add_field('python_version', python_version)
-    data.add_field('package_manager', "poetry")  # TODO: detect/ask user
-    data.add_field('code', open('/tmp/libertai-agent.zip', 'rb'), filename='libertai-agent.zip')
+    data.add_field("secret", libertai_config.secret)
+    data.add_field("python_version", python_version)
+    data.add_field("package_manager", package_manager.value)
+    data.add_field("code", open(agent_zip_path, "rb"), filename="libertai-agent.zip")
 
     async with aiohttp.ClientSession() as session:
-        async with session.put(f"{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}",
-                               headers={'accept': 'application/json'},
-                               data=data) as response:
+        async with session.put(
+            f"{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}",
+            headers={"accept": "application/json"},
+            data=data,
+        ) as response:
             if response.status == 200:
                 print("Request succeeded:", await response.text())
             else:
                 print(f"Request failed: {response.status}")
                 print(await response.text())
 
-    os.remove("/tmp/libertai-agent.zip")
+    os.remove(agent_zip_path)
 
     # with Progress(TextColumn(TEXT_PROGRESS_FORMAT),
     #               SpinnerColumn(finished_text="✔ ")) as progress:
