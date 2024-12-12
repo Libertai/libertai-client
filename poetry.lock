@@ -1185,13 +1185,22 @@ referencing = ">=0.31.0"
 
 [[package]]
 name = "libertai-utils"
+<<<<<<< HEAD
 version = "0.0.7"
+=======
+version = "0.0.9"
+>>>>>>> 2993581 (feat(agent): Working instance deployment)
 description = "LibertAI internal types and functions"
 optional = false
 python-versions = "<4.0,>=3.11"
 files = [
+<<<<<<< HEAD
     {file = "libertai_utils-0.0.7-py3-none-any.whl", hash = "sha256:6d4078a960ad0ce469a259618ebafddd64fbaa37f28b2675d6b0b621b5956e61"},
     {file = "libertai_utils-0.0.7.tar.gz", hash = "sha256:d8dc12c602cf1b217627f304b91b2cd1022435739095eb5d18753284324dc9a7"},
+=======
+    {file = "libertai_utils-0.0.9-py3-none-any.whl", hash = "sha256:1b207b21462d455436ca395d5ad0910f2423740b3969779e7fca29c3c963211c"},
+    {file = "libertai_utils-0.0.9.tar.gz", hash = "sha256:6515c0ff050a7c06407437f5173406bd3c9825e826a8906637c55051db9c6c06"},
+>>>>>>> 2993581 (feat(agent): Working instance deployment)
 ]
 
 [package.dependencies]
@@ -2442,4 +2451,8 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
+<<<<<<< HEAD
 content-hash = "f3fe516c339c044d0b5ac718b9ad3a570ff2328ed5d8d34aab486c0e4af243cb"
+=======
+content-hash = "3aa88822ba1aa3acfffbdf15be1c9b00ea625689905874f5100b7ed0e04c1864"
+>>>>>>> 2993581 (feat(agent): Working instance deployment)
