@@ -1,11 +1,8 @@
 import json
 import os
-import zipfile
-from enum import Enum
 from typing import Annotated
 
 import aiohttp
-import pathspec
 import rich
 import typer
 from dotenv import dotenv_values
@@ -13,7 +10,9 @@ from libertai_utils.interfaces.agent import UpdateAgentResponse
 from rich.console import Console
 
 from libertai_client.config import config
-from libertai_client.utils.agent import parse_agent_config_env
+from libertai_client.interfaces.agent import AgentPythonPackageManager, AgentUsageType
+from libertai_client.utils.agent import parse_agent_config_env, create_agent_zip
+from libertai_client.utils.python import detect_python_project_version
 from libertai_client.utils.system import get_full_path
 from libertai_client.utils.typer import AsyncTyper
 
@@ -21,63 +20,31 @@ app = AsyncTyper(name="agent", help="Deploy and manage agents")
 
 err_console = Console(stderr=True)
 
-AGENT_ZIP_BLACKLIST = [".git", ".idea", ".vscode"]
-AGENT_ZIP_WHITELIST = [".env"]
-
-
-def create_agent_zip(src_dir: str, zip_name: str):
-    # Read and parse the .gitignore file
-    with open(get_full_path(src_dir, ".gitignore"), "r") as gitignore_file:
-        gitignore_patterns = gitignore_file.read()
-    spec = pathspec.PathSpec.from_lines(
-        "gitwildmatch", gitignore_patterns.splitlines() + AGENT_ZIP_BLACKLIST
-    )
-
-    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, _, files in os.walk(src_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                relative_path = os.path.relpath(file_path, src_dir)
-
-                # Check if the file matches any .gitignore pattern
-                if (
-                    not spec.match_file(relative_path)
-                    or relative_path in AGENT_ZIP_WHITELIST
-                ):
-                    zipf.write(file_path, arcname=relative_path)
-
-
-class AgentPythonPackageManager(str, Enum):
-    poetry = "poetry"
-    pip = "pip"
-
-
-class AgentUsageType(str, Enum):
-    fastapi = "fastapi"
-    python = "python"
-
 
 @app.command()
 async def deploy(
-    path: Annotated[
-        str, typer.Option(help="Path to the root of your repository", prompt=True)
-    ] = ".",
+    path: Annotated[str, typer.Argument(help="Path to the root of your project")] = ".",
     python_version: Annotated[
-        str, typer.Option(help="Version to deploy with", prompt=True)
-    ] = "3.11",
+        str | None, typer.Option(help="Version to deploy with", prompt=False)
+    ] = None,
     package_manager: Annotated[
-        AgentPythonPackageManager, typer.Option(case_sensitive=False, prompt=True)
-    ] = AgentPythonPackageManager.pip.value,  # type: ignore
+        AgentPythonPackageManager | None,
+        typer.Option(
+            help="Package manager used to handle dependencies",
+            case_sensitive=False,
+            prompt=False,
+        ),
+    ] = None,
     usage_type: Annotated[
-        AgentUsageType, typer.Option(case_sensitive=False, prompt=True)
-    ] = AgentUsageType.fastapi.value,  # type: ignore
+        AgentUsageType,
+        typer.Option(
+            help="How the agent is called", case_sensitive=False, prompt=False
+        ),
+    ] = AgentUsageType.fastapi,
 ):
     """
     Deploy or redeploy an agent
     """
-
-    # TODO: try to detect package manager, show detected value and ask user for the confirmation or change
-    # Same for python version
 
     # TODO: allow user to give a custom deployment script URL
 
@@ -88,8 +55,17 @@ async def deploy(
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
 
-    agent_zip_path = "/tmp/libertai-agent.zip"
+    # TODO: try to detect package manager, show detected value and ask user for the confirmation or change
+    if package_manager is None:
+        package_manager = AgentPythonPackageManager.poetry
 
+    if python_version is None:
+        # Trying to find the python version
+        detected_python_version = detect_python_project_version(path, package_manager)
+        # Confirming the version with the user (or asking if none found)
+        python_version = typer.prompt("Python version", default=detected_python_version)
+
+    agent_zip_path = "/tmp/libertai-agent.zip"
     create_agent_zip(path, agent_zip_path)
 
     data = aiohttp.FormData()
