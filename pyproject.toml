@@ -25,6 +25,7 @@ python-dotenv = "^1.0.1"
 libertai-utils = "0.0.9"
 pathspec = "^0.12.1"
 poetry-core = "^2.0.0"
+questionary = "^2.1.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"
