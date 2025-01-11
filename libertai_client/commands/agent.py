@@ -52,6 +52,11 @@ class AgentPythonPackageManager(str, Enum):
     pip = "pip"
 
 
+class AgentUsageType(str, Enum):
+    fastapi = "fastapi"
+    python = "python"
+
+
 @app.command()
 async def deploy(
     path: Annotated[
@@ -63,6 +68,9 @@ async def deploy(
     package_manager: Annotated[
         AgentPythonPackageManager, typer.Option(case_sensitive=False, prompt=True)
     ] = AgentPythonPackageManager.pip.value,  # type: ignore
+    usage_type: Annotated[
+        AgentUsageType, typer.Option(case_sensitive=False, prompt=True)
+    ] = AgentUsageType.fastapi.value,  # type: ignore
 ):
     """
     Deploy or redeploy an agent
@@ -88,6 +96,7 @@ async def deploy(
     data.add_field("secret", libertai_config.secret)
     data.add_field("python_version", python_version)
     data.add_field("package_manager", package_manager.value)
+    data.add_field("usage_type", usage_type.value)
     data.add_field("code", open(agent_zip_path, "rb"), filename="libertai-agent.zip")
 
     async with aiohttp.ClientSession() as session:
@@ -98,6 +107,7 @@ async def deploy(
         ) as response:
             if response.status == 200:
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))  # noqa: F821
+                # TODO: don't show /docs if deployed in python mode
                 rich.print(
                     f"[green]Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
                 )
