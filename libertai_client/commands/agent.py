@@ -3,6 +3,7 @@ import os
 from typing import Annotated
 
 import aiohttp
+import questionary
 import rich
 import typer
 from dotenv import dotenv_values
@@ -12,13 +13,36 @@ from rich.console import Console
 from libertai_client.config import config
 from libertai_client.interfaces.agent import AgentPythonPackageManager, AgentUsageType
 from libertai_client.utils.agent import parse_agent_config_env, create_agent_zip
-from libertai_client.utils.python import detect_python_project_version
+from libertai_client.utils.python import (
+    detect_python_project_version,
+    detect_python_dependencies_management,
+    validate_python_version,
+)
 from libertai_client.utils.system import get_full_path
 from libertai_client.utils.typer import AsyncTyper
 
 app = AsyncTyper(name="agent", help="Deploy and manage agents")
 
 err_console = Console(stderr=True)
+
+dependencies_management_choices: list[questionary.Choice] = [
+    questionary.Choice(
+        title="poetry",
+        value=AgentPythonPackageManager.poetry,
+        description="poetry-style pyproject.toml and poetry.lock",
+    ),
+    questionary.Choice(
+        title="requirements.txt",
+        value=AgentPythonPackageManager.pip,
+        description="Any management tool that outputs a requirements.txt file (pip, pip-tools...)",
+    ),
+    questionary.Choice(
+        title="pyproject.toml",
+        value="TODO",
+        description="Any tool respecting the standard PEP 621 pyproject.toml (hatch, modern usage of setuptools...)",
+        disabled="Coming soon",
+    ),
+]
 
 
 @app.command()
@@ -27,7 +51,7 @@ async def deploy(
     python_version: Annotated[
         str | None, typer.Option(help="Version to deploy with", prompt=False)
     ] = None,
-    package_manager: Annotated[
+    dependencies_management: Annotated[
         AgentPythonPackageManager | None,
         typer.Option(
             help="Package manager used to handle dependencies",
@@ -55,15 +79,42 @@ async def deploy(
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
 
-    # TODO: try to detect package manager, show detected value and ask user for the confirmation or change
-    if package_manager is None:
-        package_manager = AgentPythonPackageManager.poetry
+    if dependencies_management is None:
+        # Trying to find the way dependencies are managed
+        detected_dependencies_management = detect_python_dependencies_management(path)
+        # Confirming with the user (or asking if none found)
+        dependencies_management = await questionary.select(
+            "Dependencies management",
+            choices=dependencies_management_choices,
+            default=next(
+                (
+                    choice
+                    for choice in dependencies_management_choices
+                    if choice.value == detected_dependencies_management.value
+                ),
+                None,
+            ),
+            show_description=True,
+        ).ask_async()
+        if dependencies_management is None:
+            err_console.print(
+                "[red]You must select the way Python dependencies are managed."
+            )
+            raise typer.Exit(1)
 
     if python_version is None:
         # Trying to find the python version
-        detected_python_version = detect_python_project_version(path, package_manager)
+        detected_python_version = detect_python_project_version(
+            path, dependencies_management
+        )
         # Confirming the version with the user (or asking if none found)
-        python_version = typer.prompt("Python version", default=detected_python_version)
+        python_version = await questionary.text(
+            "Python version",
+            default=detected_python_version
+            if detected_python_version is not None
+            else "",
+            validate=validate_python_version,
+        ).ask_async()
 
     agent_zip_path = "/tmp/libertai-agent.zip"
     create_agent_zip(path, agent_zip_path)
@@ -71,7 +122,7 @@ async def deploy(
     data = aiohttp.FormData()
     data.add_field("secret", libertai_config.secret)
     data.add_field("python_version", python_version)
-    data.add_field("package_manager", package_manager.value)
+    data.add_field("package_manager", dependencies_management.value)
     data.add_field("usage_type", usage_type.value)
     data.add_field("code", open(agent_zip_path, "rb"), filename="libertai-agent.zip")
 
@@ -83,10 +134,12 @@ async def deploy(
         ) as response:
             if response.status == 200:
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))  # noqa: F821
-                # TODO: don't show /docs if deployed in python mode
-                rich.print(
-                    f"[green]Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
+                success_text = (
+                    f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
+                    if usage_type == AgentUsageType.fastapi
+                    else f"Agent successfully deployed on instance {response_data.instance_ip}"
                 )
+                rich.print(f"[green]{success_text}")
             else:
                 error_message = await response.text()
                 err_console.print(f"[red]Request failed\n{error_message}")
