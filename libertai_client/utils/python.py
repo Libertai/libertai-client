@@ -9,6 +9,12 @@ from libertai_client.interfaces.agent import AgentPythonPackageManager
 from libertai_client.utils.system import get_full_path
 
 
+def validate_python_version(version: str) -> bool:
+    if re.match(r"^3(?:\.\d+){0,2}$", version):
+        return True
+    return False
+
+
 def __fetch_real_python_versions() -> list[str]:
     response = requests.get(
         "https://api.github.com/repos/python/cpython/tags?per_page=100"
@@ -16,7 +22,7 @@ def __fetch_real_python_versions() -> list[str]:
     if response.status_code == 200:
         releases = response.json()
         versions = [str(release["name"]).removeprefix("v") for release in releases]
-        exact_versions = [v for v in versions if re.match(r"^\d+\.\d+\.\d+$", v)]
+        exact_versions = [v for v in versions if validate_python_version(v)]
         return exact_versions
     else:
         return []
@@ -62,3 +68,18 @@ def detect_python_project_version(
     # TODO: if pyproject, look in pyproject.toml
     # TODO: if pip, look in requirements.txt
     return None
+
+
+def detect_python_dependencies_management(
+    project_path: str,
+) -> AgentPythonPackageManager:
+    try:
+        _poetry_lock_path = get_full_path(project_path, "poetry.lock")
+        # Path was found without throwing an error, its poetry
+        return AgentPythonPackageManager.poetry
+    except FileNotFoundError:
+        pass
+
+    # TODO: confirm with requirements.txt
+    # TODO: handle pyproject.toml standard compatible package managers
+    return AgentPythonPackageManager.pip
