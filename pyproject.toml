@@ -24,6 +24,7 @@ pydantic = ">=1.10.5,<2.0.0"
 python-dotenv = "^1.0.1"
 libertai-utils = "0.0.9"
 pathspec = "^0.12.1"
+poetry-core = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"
