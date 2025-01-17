@@ -72,7 +72,7 @@ def detect_python_project_version(
 
 def detect_python_dependencies_management(
     project_path: str,
-) -> AgentPythonPackageManager:
+) -> AgentPythonPackageManager | None:
     try:
         _poetry_lock_path = get_full_path(project_path, "poetry.lock")
         # Path was found without throwing an error, its poetry
@@ -80,6 +80,18 @@ def detect_python_dependencies_management(
     except FileNotFoundError:
         pass
 
-    # TODO: confirm with requirements.txt
-    # TODO: handle pyproject.toml standard compatible package managers
-    return AgentPythonPackageManager.pip
+    try:
+        _requirements_path = get_full_path(project_path, "requirements.tx")
+        # Path was found without throwing an error, we can use this to install deps
+        return AgentPythonPackageManager.requirements
+    except FileNotFoundError:
+        pass
+
+    try:
+        _pyproject_path = get_full_path(project_path, "pyproject.toml")
+        # Path was found without throwing an error, and Poetry tested earlier so it should be a standard pyproject
+        return AgentPythonPackageManager.pyproject
+    except FileNotFoundError:
+        pass
+
+    return None
