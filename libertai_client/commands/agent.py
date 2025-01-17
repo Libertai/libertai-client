@@ -33,14 +33,13 @@ dependencies_management_choices: list[questionary.Choice] = [
     ),
     questionary.Choice(
         title="requirements.txt",
-        value=AgentPythonPackageManager.pip,
+        value=AgentPythonPackageManager.requirements,
         description="Any management tool that outputs a requirements.txt file (pip, pip-tools...)",
     ),
     questionary.Choice(
         title="pyproject.toml",
-        value="TODO",
+        value=AgentPythonPackageManager.pyproject,
         description="Any tool respecting the standard PEP 621 pyproject.toml (hatch, modern usage of setuptools...)",
-        disabled="Coming soon",
     ),
 ]
 
@@ -90,7 +89,8 @@ async def deploy(
                 (
                     choice
                     for choice in dependencies_management_choices
-                    if choice.value == detected_dependencies_management.value
+                    if detected_dependencies_management is not None
+                    and choice.value == detected_dependencies_management.value
                 ),
                 None,
             ),
@@ -133,7 +133,7 @@ async def deploy(
             data=data,
         ) as response:
             if response.status == 200:
-                response_data = UpdateAgentResponse(**json.loads(await response.text()))  # noqa: F821
+                response_data = UpdateAgentResponse(**json.loads(await response.text()))
                 success_text = (
                     f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
                     if usage_type == AgentUsageType.fastapi
@@ -141,7 +141,9 @@ async def deploy(
                 )
                 rich.print(f"[green]{success_text}")
             else:
-                error_message = await response.text()
-                err_console.print(f"[red]Request failed\n{error_message}")
+                error_message = await response.json()
+                err_console.print(
+                    f"[red]Request failed: {error_message.get("detail", "An unknown error happened.")}"
+                )
 
     os.remove(agent_zip_path)
