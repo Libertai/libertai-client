@@ -1,16 +1,19 @@
+from enum import Enum
+
 from pydantic import BaseModel
-
-
-class DockerCommand(BaseModel):
-    id: str
-    title: str
-    content: str
-
-
-class UpdateAgentResponse(BaseModel):
-    vm_hash: str
 
 
 class AgentConfig(BaseModel):
     id: str
     secret: str
+
+
+class AgentPythonPackageManager(str, Enum):
+    poetry = "poetry"
+    requirements = "requirements"
+    pyproject = "pyproject"
+
+
+class AgentUsageType(str, Enum):
+    fastapi = "fastapi"
+    python = "python"
