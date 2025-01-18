@@ -56,8 +56,8 @@ def detect_python_project_version(
                         return line.split("=")[1].strip()
         except FileNotFoundError:
             pass
-    #
-    # # Checking if we have a .python-version file, for example created by pyenv
+
+    # Checking if we have a .python-version file, for example created by pyenv
     try:
         version_file_path = get_full_path(project_path, ".python-version")
         with open(version_file_path, "r") as file:
