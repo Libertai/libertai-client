@@ -43,6 +43,19 @@ dependencies_management_choices: list[questionary.Choice] = [
     ),
 ]
 
+usage_type_choices: list[questionary.Choice] = [
+    questionary.Choice(
+        title="fastapi",
+        value=AgentUsageType.fastapi,
+        description="API-exposed agent",
+    ),
+    questionary.Choice(
+        title="python",
+        value=AgentUsageType.python,
+        description="Agent called with Python code",
+    ),
+]
+
 
 @app.command()
 async def deploy(
@@ -59,11 +72,11 @@ async def deploy(
         ),
     ] = None,
     usage_type: Annotated[
-        AgentUsageType,
+        AgentUsageType | None,
         typer.Option(
             help="How the agent is called", case_sensitive=False, prompt=False
         ),
-    ] = AgentUsageType.fastapi,
+    ] = None,
 ):
     """
     Deploy or redeploy an agent
@@ -114,6 +127,14 @@ async def deploy(
             if detected_python_version is not None
             else "",
             validate=validate_python_version,
+        ).ask_async()
+
+    if usage_type is None:
+        usage_type = await questionary.select(
+            "Usage type",
+            choices=usage_type_choices,
+            default=None,
+            show_description=True,
         ).ask_async()
 
     agent_zip_path = "/tmp/libertai-agent.zip"
