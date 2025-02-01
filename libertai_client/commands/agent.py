@@ -6,6 +6,7 @@ import aiohttp
 import questionary
 import rich
 import typer
+from aiohttp import ContentTypeError
 from dotenv import dotenv_values
 from libertai_utils.interfaces.agent import UpdateAgentResponse
 from rich.console import Console
@@ -162,9 +163,12 @@ async def deploy(
                 )
                 rich.print(f"[green]{success_text}")
             else:
-                error_message = await response.json()
-                err_console.print(
-                    f"[red]Request failed: {error_message.get("detail", "An unknown error happened.")}"
-                )
+                try:
+                    error_message = (await response.json()).get(
+                        "detail", "An unknown error happened."
+                    )
+                except ContentTypeError:
+                    error_message = await response.text()
+                err_console.print(f"[red]Request failed: {error_message}")
 
     os.remove(agent_zip_path)
