@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "libertai-client"
-version = "0.0.2"
+version = "0.1.0"
 description = "CLI for LibertAI products"
 authors = ["LibertAI.io team <hello@libertai.io>"]
 readme = "README.md"
@@ -22,7 +22,7 @@ python = "^3.11"
 typer = "^0.12.5"
 pydantic = ">=1.10.5,<2.0.0"
 python-dotenv = "^1.0.1"
-libertai-utils = "0.0.9"
+libertai-utils = "0.0.10"
 pathspec = "^0.12.1"
 poetry-core = "^2.0.0"
 questionary = "^2.1.0"

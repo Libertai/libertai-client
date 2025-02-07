@@ -10,6 +10,7 @@ from libertai_client.utils.system import get_full_path
 
 
 def validate_python_version(version: str) -> bool:
+    # TODO: check if valid docker image
     if re.match(r"^3(?:\.\d+){0,2}$", version):
         return True
     return False

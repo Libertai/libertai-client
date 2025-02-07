@@ -78,6 +78,7 @@ async def deploy(
             help="How the agent is called", case_sensitive=False, prompt=False
         ),
     ] = None,
+    show_error_log: Annotated[bool, typer.Option("--show-error-log")] = False,
 ):
     """
     Deploy or redeploy an agent
@@ -137,6 +138,9 @@ async def deploy(
             default=None,
             show_description=True,
         ).ask_async()
+        if usage_type is None:
+            # User interrupted the question
+            raise typer.Exit(1)
 
     agent_zip_path = "/tmp/libertai-agent.zip"
     create_agent_zip(path, agent_zip_path)
@@ -156,6 +160,8 @@ async def deploy(
         ) as response:
             if response.status == 200:
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))
+                if show_error_log:
+                    err_console.print(f"[red]Error log:\n{response_data.error_log}")
                 success_text = (
                     f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
                     if usage_type == AgentUsageType.fastapi
