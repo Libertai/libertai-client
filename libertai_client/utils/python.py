@@ -2,10 +2,10 @@ import re
 import tomllib
 
 import requests
+from libertai_utils.interfaces.agent import AgentPythonPackageManager
 from poetry.core.constraints.version import Version
 from poetry.core.constraints.version.parser import parse_constraint
 
-from libertai_client.interfaces.agent import AgentPythonPackageManager
 from libertai_client.utils.system import get_full_path
 
 

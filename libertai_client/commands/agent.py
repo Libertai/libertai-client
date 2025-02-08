@@ -8,11 +8,14 @@ import rich
 import typer
 from aiohttp import ContentTypeError
 from dotenv import dotenv_values
-from libertai_utils.interfaces.agent import UpdateAgentResponse
+from libertai_utils.interfaces.agent import (
+    UpdateAgentResponse,
+    AgentPythonPackageManager,
+    AgentUsageType,
+)
 from rich.console import Console
 
 from libertai_client.config import config
-from libertai_client.interfaces.agent import AgentPythonPackageManager, AgentUsageType
 from libertai_client.utils.agent import parse_agent_config_env, create_agent_zip
 from libertai_client.utils.python import (
     detect_python_project_version,
