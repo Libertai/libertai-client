@@ -81,7 +81,6 @@ async def deploy(
             help="How the agent is called", case_sensitive=False, prompt=False
         ),
     ] = None,
-    show_error_log: Annotated[bool, typer.Option("--show-error-log")] = False,
 ):
     """
     Deploy or redeploy an agent
@@ -163,14 +162,18 @@ async def deploy(
         ) as response:
             if response.status == 200:
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))
-                if show_error_log:
+                if len(response_data.error_log) > 0:
+                    # Errors occurred
                     err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                success_text = (
-                    f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
-                    if usage_type == AgentUsageType.fastapi
-                    else f"Agent successfully deployed on instance {response_data.instance_ip}"
-                )
-                rich.print(f"[green]{success_text}")
+                    warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
+                    rich.print(f"[yellow]{warning_text}")
+                else:
+                    success_text = (
+                        f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
+                        if usage_type == AgentUsageType.fastapi
+                        else f"Agent successfully deployed on instance {response_data.instance_ip}"
+                    )
+                    rich.print(f"[green]{success_text}")
             else:
                 try:
                     error_message = (await response.json()).get(
