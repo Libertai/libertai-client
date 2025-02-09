@@ -81,12 +81,18 @@ async def deploy(
             help="How the agent is called", case_sensitive=False, prompt=False
         ),
     ] = None,
+    deploy_script_url: Annotated[
+        str | None,
+        typer.Option(
+            help="Optional custom deployment script URL",
+            case_sensitive=False,
+            prompt=False,
+        ),
+    ] = None,
 ):
     """
     Deploy or redeploy an agent
     """
-
-    # TODO: allow user to give a custom deployment script URL
 
     try:
         libertai_env_path = get_full_path(path, ".env.libertai")
@@ -118,6 +124,12 @@ async def deploy(
                 "[red]You must select the way Python dependencies are managed."
             )
             raise typer.Exit(1)
+
+    if python_version is not None:
+        # Checking if the given Python version is in the right format
+        if not validate_python_version(python_version):
+            # Reset it to use the auto-detect and question with validation
+            python_version = None
 
     if python_version is None:
         # Trying to find the python version
@@ -156,6 +168,10 @@ async def deploy(
     data.add_field("package_manager", dependencies_management.value)
     data.add_field("usage_type", usage_type.value)
     data.add_field("code", open(agent_zip_path, "rb"), filename="libertai-agent.zip")
+
+    if deploy_script_url is not None:
+        # Using custom deployment script
+        data.add_field("deploy_script_url", deploy_script_url)
 
     async with aiohttp.ClientSession() as session:
         async with session.put(
