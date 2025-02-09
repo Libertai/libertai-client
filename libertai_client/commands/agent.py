@@ -132,6 +132,9 @@ async def deploy(
             else "",
             validate=validate_python_version,
         ).ask_async()
+        if python_version is None:
+            # User interrupted the question
+            raise typer.Exit(1)
 
     if usage_type is None:
         usage_type = await questionary.select(
