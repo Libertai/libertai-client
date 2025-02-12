@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Annotated
 
 import aiohttp
@@ -23,7 +24,7 @@ from libertai_client.utils.python import (
     validate_python_version,
 )
 from libertai_client.utils.system import get_full_path
-from libertai_client.utils.typer import AsyncTyper
+from libertai_client.utils.typer import AsyncTyper, validate_file_path_argument
 
 app = AsyncTyper(name="agent", help="Deploy and manage agents")
 
@@ -203,3 +204,29 @@ async def deploy(
                 err_console.print(f"[red]Request failed: {error_message}")
 
     os.remove(agent_zip_path)
+
+
+@app.command()
+async def add_ssh_key(
+    path: Annotated[str, typer.Argument(help="Path to the root of your project")] = ".",
+    ssh_public_key_file: Annotated[
+        Path | None,
+        typer.Option(
+            help="Path to the public key file",
+            case_sensitive=False,
+            prompt=False,
+            callback=validate_file_path_argument,
+        ),
+    ] = None,
+):
+    """
+    Add an SSH key to an agent instance
+    """
+
+    try:
+        libertai_env_path = get_full_path(path, ".env.libertai")
+        libertai_config = parse_agent_config_env(dotenv_values(libertai_env_path))
+    except (FileNotFoundError, EnvironmentError) as error:
+        err_console.print(f"[red]{error}")
+        raise typer.Exit(1)
+    return
