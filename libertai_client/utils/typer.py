@@ -1,8 +1,9 @@
 import asyncio
 import inspect
 from functools import wraps, partial
+from pathlib import Path
 
-from typer import Typer
+from typer import Typer, BadParameter
 
 
 class AsyncTyper(Typer):
@@ -26,3 +27,11 @@ class AsyncTyper(Typer):
     def command(self, *args, **kwargs):
         decorator = super().command(*args, **kwargs)
         return partial(self.maybe_run_async, decorator)
+
+
+def validate_file_path_argument(file_path: Path):
+    if not file_path.exists():
+        raise BadParameter(f"File '{file_path}' does not exist.")
+    if not file_path.is_file():
+        raise BadParameter(f"'{file_path}' is not a valid file.")
+    return file_path
