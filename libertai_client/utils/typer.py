@@ -29,7 +29,9 @@ class AsyncTyper(Typer):
         return partial(self.maybe_run_async, decorator)
 
 
-def validate_file_path_argument(file_path: Path):
+def validate_optional_file_path_argument(file_path: Path | None) -> Path | None:
+    if file_path is None:
+        return file_path
     if not file_path.exists():
         raise BadParameter(f"File '{file_path}' does not exist.")
     if not file_path.is_file():
