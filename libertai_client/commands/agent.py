@@ -13,6 +13,8 @@ from libertai_utils.interfaces.agent import (
     UpdateAgentResponse,
     AgentPythonPackageManager,
     AgentUsageType,
+    AddSSHKeyAgentBody,
+    AddSSHKeyAgentResponse,
 )
 from rich.console import Console
 
@@ -23,8 +25,13 @@ from libertai_client.utils.python import (
     detect_python_dependencies_management,
     validate_python_version,
 )
-from libertai_client.utils.system import get_full_path
-from libertai_client.utils.typer import AsyncTyper, validate_file_path_argument
+from libertai_client.utils.system import (
+    get_full_path,
+    is_str_valid_file_path,
+    str_to_path,
+    is_valid_ssh_public_key,
+)
+from libertai_client.utils.typer import AsyncTyper, validate_optional_file_path_argument
 
 app = AsyncTyper(name="agent", help="Deploy and manage agents")
 
@@ -215,7 +222,7 @@ async def add_ssh_key(
             help="Path to the public key file",
             case_sensitive=False,
             prompt=False,
-            callback=validate_file_path_argument,
+            callback=validate_optional_file_path_argument,
         ),
     ] = None,
 ):
@@ -229,4 +236,47 @@ async def add_ssh_key(
     except (FileNotFoundError, EnvironmentError) as error:
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
-    return
+
+    if ssh_public_key_file is None:
+        ssh_public_key_file = str_to_path(
+            await questionary.text(
+                "SSH public key file path",
+                validate=is_str_valid_file_path,
+            ).ask_async()
+        )
+        if ssh_public_key_file is None:
+            # User interrupted the question
+            raise typer.Exit(1)
+
+    ssh_public_key = ssh_public_key_file.read_text(encoding="utf-8").strip()
+    if not is_valid_ssh_public_key(ssh_public_key):
+        err_console.print("[red]Invalid SSH key")
+        raise typer.Exit(1)
+
+    data = AddSSHKeyAgentBody(secret=libertai_config.secret, ssh_key=ssh_public_key)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}/ssh-key",
+            headers={"accept": "application/json"},
+            json=json.loads(data.json()),
+        ) as response:
+            if response.status == 200:
+                response_data = AddSSHKeyAgentResponse(
+                    **json.loads(await response.text())
+                )
+                if len(response_data.error_log) > 0:
+                    # Errors occurred
+                    err_console.print(f"[red]Error log:\n{response_data.error_log}")
+                    warning_text = "Some errors occurred during the addition of the SSH key, please check the logs above."
+                    rich.print(f"[yellow]{warning_text}")
+                else:
+                    rich.print("[green]SSH key successfully added")
+            else:
+                try:
+                    error_message = (await response.json()).get(
+                        "detail", "An unknown error happened."
+                    )
+                except ContentTypeError:
+                    error_message = await response.text()
+                err_console.print(f"[red]Request failed: {error_message}")
