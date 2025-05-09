@@ -98,13 +98,9 @@ async def deploy(
         ),
     ] = None,
     format: Annotated[
-        bool | None,
-        typer.Option(
-            help="Output format for the deployment information",
-            case_sensitive=False,
-            prompt=False,
-        ),
-    ] = None,
+        bool,
+        typer.Option("--format", help="Set the output format to JSON"),
+    ] = False,
 ):
     """
     Deploy or redeploy an agent
@@ -248,13 +244,9 @@ async def add_ssh_key(
         ),
     ] = None,
     format: Annotated[
-        bool | None,
-        typer.Option(
-            help="Output format for the deployment information",
-            case_sensitive=False,
-            prompt=False,
-        ),
-    ] = None,
+        bool,
+        typer.Option("--format", help="Set the output format to JSON"),
+    ] = False,
 ):
     """
     Add an SSH key to an agent instance
