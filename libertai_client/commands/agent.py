@@ -98,7 +98,7 @@ async def deploy(
         ),
     ] = None,
     format: Annotated[
-        str | None,
+        bool | None,
         typer.Option(
             help="Output format for the deployment information",
             case_sensitive=False,
@@ -109,10 +109,6 @@ async def deploy(
     """
     Deploy or redeploy an agent
     """
-    
-    if format and format not in {"json"}:
-        err_console.print(f"[red]The format \"{format}\" is not supported")
-        raise typer.Exit(1)
 
     try:
         libertai_env_path = get_full_path(path, ".env.libertai")
@@ -203,34 +199,30 @@ async def deploy(
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))
                 if len(response_data.error_log) > 0:
                     # Errors occurred
-                    match format:
-                        case "json":
-                            json_data = f'{{"success": false, "message": "{response_data.error_log}"}}'
-                            json_object = json.loads(json_data)
-                            json_formatted_str = json.dumps(json_object, indent=2)
-                            rich.print(json_formatted_str)
-                        case _:
-                            err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                            warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
-                            rich.print(f"[yellow]{warning_text}")
+                    if format:
+                        json_object = {"success": False, "message": response_data.error_log}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
+                        warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
+                        rich.print(f"[yellow]{warning_text}")
                     raise typer.Exit(1)
                 else:
                     url = f"http://[{response_data.instance_ip}]:8000"
                     success_text = f"Agent successfully deployed on {url}/docs"
                     
-                    match format:
-                        case "json":
-                            json_data = f'{{"success": true, "message": "{success_text}", "url": "{url}"}}'
-                            json_object = json.loads(json_data)
-                            json_formatted_str = json.dumps(json_object, indent=2)
-                            rich.print(json_formatted_str)
-                        case _:
-                            success_text += (
-                                ""
-                                if usage_type == AgentUsageType.fastapi
-                                else f"Agent successfully deployed on instance {response_data.instance_ip}"
-                            )
-                            rich.print(f"[green]{success_text}")
+                    if format:
+                        json_object = {"success": True, "message": success_text, "url": url}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        success_text += (
+                            ""
+                            if usage_type == AgentUsageType.fastapi
+                            else f"Agent successfully deployed on instance {response_data.instance_ip}"
+                        )
+                        rich.print(f"[green]{success_text}")
             else:
                 try:
                     error_message = (await response.json()).get(
@@ -256,7 +248,7 @@ async def add_ssh_key(
         ),
     ] = None,
     format: Annotated[
-        str | None,
+        bool | None,
         typer.Option(
             help="Output format for the deployment information",
             case_sensitive=False,
@@ -267,10 +259,6 @@ async def add_ssh_key(
     """
     Add an SSH key to an agent instance
     """
-    
-    if format and format not in {"json"}:
-        err_console.print(f"[red]The format \"{format}\" is not supported")
-        raise typer.Exit(1)
 
     try:
         libertai_env_path = get_full_path(path, ".env.libertai")
@@ -310,25 +298,21 @@ async def add_ssh_key(
                 if len(response_data.error_log) > 0:
                     # Errors occurred
                     warning_text = "Some errors occurred during the addition of the SSH key, please check the logs above."
-                    match format:
-                        case "json":
-                            json_data = f'{{"success": false, "message": "{warning_text}", "error_log": {response_data.error_log}}}'
-                            json_object = json.loads(json_data)
-                            json_formatted_str = json.dumps(json_object, indent=2)
-                            rich.print(json_formatted_str)
-                        case _:
-                            err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                            rich.print(f"[yellow]{warning_text}")
+                    if format:
+                        json_object = {"success": False, "message": response_data.error_log, "error_log": response_data.error_log}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
+                        rich.print(f"[yellow]{warning_text}")
                     raise typer.Exit(1)
                 else:
-                    match format:
-                        case "json":
-                            json_data = '{{"success": true, "message": "SSH key successfully added"}}'
-                            json_object = json.loads(json_data)
-                            json_formatted_str = json.dumps(json_object, indent=2)
-                            rich.print(json_formatted_str)
-                        case _:
-                            rich.print("[green]SSH key successfully added")
+                    if format:
+                        json_object = {"success": True, "message": "SSH key successfully added"}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        rich.print("[green]SSH key successfully added")
             else:
                 try:
                     error_message = (await response.json()).get(
