@@ -97,6 +97,10 @@ async def deploy(
             prompt=False,
         ),
     ] = None,
+    format: Annotated[
+        bool,
+        typer.Option("--json", help="Set the output format to JSON"),
+    ] = False,
 ):
     """
     Deploy or redeploy an agent
@@ -191,16 +195,30 @@ async def deploy(
                 response_data = UpdateAgentResponse(**json.loads(await response.text()))
                 if len(response_data.error_log) > 0:
                     # Errors occurred
-                    err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                    warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
-                    rich.print(f"[yellow]{warning_text}")
+                    if format:
+                        json_object = {"success": False, "message": response_data.error_log}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
+                        warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
+                        rich.print(f"[yellow]{warning_text}")
+                    raise typer.Exit(1)
                 else:
-                    success_text = (
-                        f"Agent successfully deployed on http://[{response_data.instance_ip}]:8000/docs"
-                        if usage_type == AgentUsageType.fastapi
-                        else f"Agent successfully deployed on instance {response_data.instance_ip}"
-                    )
-                    rich.print(f"[green]{success_text}")
+                    url = f"http://[{response_data.instance_ip}]:8000"
+                    success_text = f"Agent successfully deployed on {url}/docs"
+                    
+                    if format:
+                        json_object = {"success": True, "message": success_text, "url": url}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        success_text += (
+                            ""
+                            if usage_type == AgentUsageType.fastapi
+                            else f"Agent successfully deployed on instance {response_data.instance_ip}"
+                        )
+                        rich.print(f"[green]{success_text}")
             else:
                 try:
                     error_message = (await response.json()).get(
@@ -225,6 +243,10 @@ async def add_ssh_key(
             callback=validate_optional_file_path_argument,
         ),
     ] = None,
+    format: Annotated[
+        bool,
+        typer.Option("--json", help="Set the output format to JSON"),
+    ] = False,
 ):
     """
     Add an SSH key to an agent instance
@@ -267,11 +289,22 @@ async def add_ssh_key(
                 )
                 if len(response_data.error_log) > 0:
                     # Errors occurred
-                    err_console.print(f"[red]Error log:\n{response_data.error_log}")
                     warning_text = "Some errors occurred during the addition of the SSH key, please check the logs above."
-                    rich.print(f"[yellow]{warning_text}")
+                    if format:
+                        json_object = {"success": False, "message": response_data.error_log, "error_log": response_data.error_log}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
+                        rich.print(f"[yellow]{warning_text}")
+                    raise typer.Exit(1)
                 else:
-                    rich.print("[green]SSH key successfully added")
+                    if format:
+                        json_object = {"success": True, "message": "SSH key successfully added"}
+                        json_formatted_str = json.dumps(json_object, indent=2)
+                        rich.print(json_formatted_str)
+                    else:
+                        rich.print("[green]SSH key successfully added")
             else:
                 try:
                     error_message = (await response.json()).get(
