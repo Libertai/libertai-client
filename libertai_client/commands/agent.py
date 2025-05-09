@@ -99,7 +99,7 @@ async def deploy(
     ] = None,
     format: Annotated[
         bool,
-        typer.Option("--format", help="Set the output format to JSON"),
+        typer.Option("--json", help="Set the output format to JSON"),
     ] = False,
 ):
     """
@@ -245,7 +245,7 @@ async def add_ssh_key(
     ] = None,
     format: Annotated[
         bool,
-        typer.Option("--format", help="Set the output format to JSON"),
+        typer.Option("--json", help="Set the output format to JSON"),
     ] = False,
 ):
     """
