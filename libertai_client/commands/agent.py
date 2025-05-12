@@ -226,7 +226,12 @@ async def deploy(
                     )
                 except ContentTypeError:
                     error_message = await response.text()
-                err_console.print(f"[red]Request failed: {error_message}")
+                if format:
+                    json_object = {"success": False, "message": f"Request failed: {error_message}"}
+                    json_formatted_str = json.dumps(json_object, indent=2)
+                    rich.print(json_formatted_str)
+                else:
+                    err_console.print(f"[red]Request failed: {error_message}")
 
     os.remove(agent_zip_path)
 
@@ -312,4 +317,9 @@ async def add_ssh_key(
                     )
                 except ContentTypeError:
                     error_message = await response.text()
-                err_console.print(f"[red]Request failed: {error_message}")
+                if format:
+                    json_object = {"success": False, "message": f"Request failed: {error_message}"}
+                    json_formatted_str = json.dumps(json_object, indent=2)
+                    rich.print(json_formatted_str)
+                else:
+                    err_console.print(f"[red]Request failed: {error_message}")

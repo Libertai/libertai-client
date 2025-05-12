@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "libertai-client"
-version = "0.1.3"
+version = "0.1.4"
 description = "CLI for LibertAI products"
 authors = ["LibertAI.io team <hello@libertai.io>"]
 readme = "README.md"
