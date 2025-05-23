@@ -1,11 +1,15 @@
+import json
 import os
 import zipfile
 
 from pathspec import pathspec
+import rich
+from rich.console import Console
 
 from libertai_client.interfaces.agent import AgentConfig
 from libertai_client.utils.system import get_full_path
 
+err_console = Console(stderr=True)
 
 def parse_agent_config_env(env: dict[str, str | None]) -> AgentConfig:
     agent_id = env.get("LIBERTAI_AGENT_ID", None)
@@ -43,3 +47,21 @@ def create_agent_zip(src_dir: str, zip_name: str):
                     or relative_path in AGENT_ZIP_WHITELIST
                 ):
                     zipf.write(file_path, arcname=relative_path)
+
+def handle_formated_message(
+    message: str,
+    format: bool,
+    success: bool,
+    warning_text: str
+):
+    if format:
+        json_object = {"success": success, "message": message}
+        json_formatted_str = json.dumps(json_object, indent=2)
+        rich.print(json_formatted_str)
+    else:
+        if success:
+            rich.print(f"[green]{message}")
+        else:
+            err_console.print(f"[red]Error log: {message}")
+            if warning_text:    
+                rich.print(f"[yellow]{warning_text}")

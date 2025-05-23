@@ -26,6 +26,7 @@ libertai-utils = "0.0.12"
 pathspec = "^0.12.1"
 poetry-core = "^2.0.0"
 questionary = "^2.1.0"
+paramiko = "^3.5.1"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"
