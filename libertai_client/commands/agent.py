@@ -19,6 +19,7 @@ from libertai_utils.interfaces.agent import (
     UpdateAgentResponse,
 )
 from rich.console import Console
+
 from libertai_client.config import config
 from libertai_client.utils.agent import handle_formated_message, parse_agent_config_env, create_agent_zip
 from libertai_client.utils.python import (
@@ -114,6 +115,10 @@ async def deploy(
     """
     Deploy or redeploy an agent
     """
+
+    if shh_private_key_filepath is None:
+        err_console.print("[red]--shh-private-key-filepath flag is mandatory")
+        raise typer.Exit(1)
 
     if shh_private_key_filepath is None:
         err_console.print("[red]--shh-private-key-filepath flag is mandatory")
