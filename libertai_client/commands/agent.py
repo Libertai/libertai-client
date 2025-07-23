@@ -1,35 +1,21 @@
-import json
 import os
+from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated
 
 import aiohttp
-import questionary
+import paramiko
 import rich
 import typer
-from aiohttp import ContentTypeError
 from dotenv import dotenv_values
-from libertai_utils.interfaces.agent import (
-    UpdateAgentResponse,
-    AgentPythonPackageManager,
-    AgentUsageType,
-    AddSSHKeyAgentBody,
-    AddSSHKeyAgentResponse,
-)
+from paramiko import AuthenticationException
 from rich.console import Console
 
 from libertai_client.config import config
+from libertai_client.interfaces.agent import GetAgentResponse
 from libertai_client.utils.agent import parse_agent_config_env, create_agent_zip
-from libertai_client.utils.python import (
-    detect_python_project_version,
-    detect_python_dependencies_management,
-    validate_python_version,
-)
 from libertai_client.utils.system import (
     get_full_path,
-    is_str_valid_file_path,
-    str_to_path,
-    is_valid_ssh_public_key,
 )
 from libertai_client.utils.typer import AsyncTyper, validate_optional_file_path_argument
 
@@ -37,289 +23,111 @@ app = AsyncTyper(name="agent", help="Deploy and manage agents")
 
 err_console = Console(stderr=True)
 
-dependencies_management_choices: list[questionary.Choice] = [
-    questionary.Choice(
-        title="poetry",
-        value=AgentPythonPackageManager.poetry,
-        description="poetry-style pyproject.toml and poetry.lock",
-    ),
-    questionary.Choice(
-        title="requirements.txt",
-        value=AgentPythonPackageManager.requirements,
-        description="Any management tool that outputs a requirements.txt file (pip, pip-tools...)",
-    ),
-    questionary.Choice(
-        title="pyproject.toml",
-        value=AgentPythonPackageManager.pyproject,
-        description="Any tool respecting the standard PEP 621 pyproject.toml (hatch, modern usage of setuptools...)",
-    ),
-]
-
-usage_type_choices: list[questionary.Choice] = [
-    questionary.Choice(
-        title="fastapi",
-        value=AgentUsageType.fastapi,
-        description="API-exposed agent",
-    ),
-    questionary.Choice(
-        title="python",
-        value=AgentUsageType.python,
-        description="Agent called with Python code",
-    ),
-]
-
 
 @app.command()
 async def deploy(
     path: Annotated[str, typer.Argument(help="Path to the root of your project")] = ".",
-    python_version: Annotated[
-        str | None, typer.Option(help="Version to deploy with", prompt=False)
-    ] = None,
-    dependencies_management: Annotated[
-        AgentPythonPackageManager | None,
+    ssh_key_filename: Annotated[
+        Path | None,
         typer.Option(
-            help="Package manager used to handle dependencies",
+            "--ssh-key",
+            help="Path to SSH private key file",
             case_sensitive=False,
             prompt=False,
+            callback=validate_optional_file_path_argument,
         ),
     ] = None,
-    usage_type: Annotated[
-        AgentUsageType | None,
-        typer.Option(
-            help="How the agent is called", case_sensitive=False, prompt=False
-        ),
-    ] = None,
-    deploy_script_url: Annotated[
-        str | None,
-        typer.Option(
-            help="Optional custom deployment script URL",
-            case_sensitive=False,
-            prompt=False,
-        ),
-    ] = None,
-    format: Annotated[
-        bool,
-        typer.Option("--json", help="Set the output format to JSON"),
-    ] = False,
 ):
     """
     Deploy or redeploy an agent
     """
 
     try:
-        libertai_env_path = get_full_path(path, ".env.libertai")
+        libertai_env_path = get_full_path(path, ".env")
         libertai_config = parse_agent_config_env(dotenv_values(libertai_env_path))
     except (FileNotFoundError, EnvironmentError) as error:
         err_console.print(f"[red]{error}")
         raise typer.Exit(1)
-
-    if dependencies_management is None:
-        # Trying to find the way dependencies are managed
-        detected_dependencies_management = detect_python_dependencies_management(path)
-        # Confirming with the user (or asking if none found)
-        dependencies_management = await questionary.select(
-            "Dependencies management",
-            choices=dependencies_management_choices,
-            default=next(
-                (
-                    choice
-                    for choice in dependencies_management_choices
-                    if detected_dependencies_management is not None
-                    and choice.value == detected_dependencies_management.value
-                ),
-                None,
-            ),
-            show_description=True,
-        ).ask_async()
-        if dependencies_management is None:
-            err_console.print(
-                "[red]You must select the way Python dependencies are managed."
-            )
-            raise typer.Exit(1)
-
-    if python_version is not None:
-        # Checking if the given Python version is in the right format
-        if not validate_python_version(python_version):
-            # Reset it to use the auto-detect and question with validation
-            python_version = None
-
-    if python_version is None:
-        # Trying to find the python version
-        detected_python_version = detect_python_project_version(
-            path, dependencies_management
-        )
-        # Confirming the version with the user (or asking if none found)
-        python_version = await questionary.text(
-            "Python version",
-            default=detected_python_version
-            if detected_python_version is not None
-            else "",
-            validate=validate_python_version,
-        ).ask_async()
-        if python_version is None:
-            # User interrupted the question
-            raise typer.Exit(1)
-
-    if usage_type is None:
-        usage_type = await questionary.select(
-            "Usage type",
-            choices=usage_type_choices,
-            default=None,
-            show_description=True,
-        ).ask_async()
-        if usage_type is None:
-            # User interrupted the question
-            raise typer.Exit(1)
 
     agent_zip_path = "/tmp/libertai-agent.zip"
     create_agent_zip(path, agent_zip_path)
 
-    data = aiohttp.FormData()
-    data.add_field("secret", libertai_config.secret)
-    data.add_field("python_version", python_version)
-    data.add_field("package_manager", dependencies_management.value)
-    data.add_field("usage_type", usage_type.value)
-    data.add_field("code", open(agent_zip_path, "rb"), filename="libertai-agent.zip")
-
-    if deploy_script_url is not None:
-        # Using custom deployment script
-        data.add_field("deploy_script_url", deploy_script_url)
-
     async with aiohttp.ClientSession() as session:
-        async with session.put(
-            f"{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}",
+        async with session.get(
+            f"{config.AGENTS_BACKEND_URL}/agents/{libertai_config.agent_id}",
             headers={"accept": "application/json"},
-            data=data,
         ) as response:
-            if response.status == 200:
-                response_data = UpdateAgentResponse(**json.loads(await response.text()))
-                if len(response_data.error_log) > 0:
-                    # Errors occurred
-                    if format:
-                        json_object = {"success": False, "message": response_data.error_log}
-                        json_formatted_str = json.dumps(json_object, indent=2)
-                        rich.print(json_formatted_str)
-                    else:
-                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                        warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
-                        rich.print(f"[yellow]{warning_text}")
-                    raise typer.Exit(1)
-                else:
-                    url = f"http://[{response_data.instance_ip}]:8000"
-                    success_text = f"Agent successfully deployed on {url}/docs"
-                    
-                    if format:
-                        json_object = {"success": True, "message": success_text, "url": url}
-                        json_formatted_str = json.dumps(json_object, indent=2)
-                        rich.print(json_formatted_str)
-                    else:
-                        success_text += (
-                            ""
-                            if usage_type == AgentUsageType.fastapi
-                            else f"Agent successfully deployed on instance {response_data.instance_ip}"
-                        )
-                        rich.print(f"[green]{success_text}")
-            else:
+            if response.status != HTTPStatus.OK:
                 try:
                     error_message = (await response.json()).get(
-                        "detail", "An unknown error happened."
+                        "detail", "An unknown error occurred."
                     )
-                except ContentTypeError:
+                except aiohttp.ContentTypeError:
                     error_message = await response.text()
-                if format:
-                    json_object = {"success": False, "message": f"Request failed: {error_message}"}
-                    json_formatted_str = json.dumps(json_object, indent=2)
-                    rich.print(json_formatted_str)
-                else:
-                    err_console.print(f"[red]Request failed: {error_message}")
+                err_console.print(
+                    f"[red]Fetching agent details failed: {error_message}"
+                )
+                raise typer.Exit(1)
+
+            agent_data = GetAgentResponse(**(await response.json()))
+            if agent_data.instance_hash is None:
+                err_console.print("[red]Agent has no instance linked to it.")
+                raise typer.Exit(1)
+            elif agent_data.subscription_status == "inactive":
+                err_console.print("[red]Agent subscription is inactive.")
+                raise typer.Exit(1)
+            elif agent_data.instance_ip is None:
+                err_console.print(
+                    "[red]Agent instance doesn't seem to be allocated yet, wait a few minutes and try again."
+                )
+                raise typer.Exit(1)
+            else:
+                rich.print(f"[green]Agent '{agent_data.name}' found, deploying...")
+
+            # Create a Paramiko SSH client
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+            try:
+                # Connect to the server
+                ssh_client.connect(
+                    hostname=agent_data.instance_ip,
+                    username="root",
+                    key_filename=str(ssh_key_filename) if ssh_key_filename else None,
+                )
+            except AuthenticationException:
+                err_console.print(
+                    "[red]SSH authentication failed, please use the --ssh-key option to specify your private key file if necessary."
+                )
+                raise typer.Exit(1)
+
+            # Send the zip with the code
+            sftp = ssh_client.open_sftp()
+            remote_path = "/tmp/libertai-agent.zip"
+            sftp.put(agent_zip_path, remote_path)
+            sftp.close()
+
+            script_path = "/tmp/deploy-agent.sh"
+
+            # Execute the command
+            _stdin, _stdout, stderr = ssh_client.exec_command(
+                f"wget {config.DEPLOY_SCRIPT_URL} -O {script_path} -q --no-cache && chmod +x {script_path} && {script_path}"
+            )
+            # Waiting for the command to complete to get error logs
+            stderr.channel.recv_exit_status()
+
+            # Close the connection
+            ssh_client.close()
+
+            error_log = stderr.read()
+
+            if len(error_log) > 0:
+                # Errors occurred
+                err_console.print(f"[red]Error log:\n{error_log}")
+                warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
+                rich.print(f"[yellow]{warning_text}")
+            else:
+                success_text = f"Agent successfully deployed on the instance (IPv6: {agent_data.instance_ip})"
+                rich.print(f"[green]{success_text}")
 
     os.remove(agent_zip_path)
-
-
-@app.command()
-async def add_ssh_key(
-    path: Annotated[str, typer.Argument(help="Path to the root of your project")] = ".",
-    ssh_public_key_file: Annotated[
-        Path | None,
-        typer.Option(
-            help="Path to the public key file",
-            case_sensitive=False,
-            prompt=False,
-            callback=validate_optional_file_path_argument,
-        ),
-    ] = None,
-    format: Annotated[
-        bool,
-        typer.Option("--json", help="Set the output format to JSON"),
-    ] = False,
-):
-    """
-    Add an SSH key to an agent instance
-    """
-
-    try:
-        libertai_env_path = get_full_path(path, ".env.libertai")
-        libertai_config = parse_agent_config_env(dotenv_values(libertai_env_path))
-    except (FileNotFoundError, EnvironmentError) as error:
-        err_console.print(f"[red]{error}")
-        raise typer.Exit(1)
-
-    if ssh_public_key_file is None:
-        ssh_public_key_file = str_to_path(
-            await questionary.text(
-                "SSH public key file path",
-                validate=is_str_valid_file_path,
-            ).ask_async()
-        )
-        if ssh_public_key_file is None:
-            # User interrupted the question
-            raise typer.Exit(1)
-
-    ssh_public_key = ssh_public_key_file.read_text(encoding="utf-8").strip()
-    if not is_valid_ssh_public_key(ssh_public_key):
-        err_console.print("[red]Invalid SSH key")
-        raise typer.Exit(1)
-
-    data = AddSSHKeyAgentBody(secret=libertai_config.secret, ssh_key=ssh_public_key)
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            f"{config.AGENTS_BACKEND_URL}/agent/{libertai_config.id}/ssh-key",
-            headers={"accept": "application/json"},
-            json=json.loads(data.json()),
-        ) as response:
-            if response.status == 200:
-                response_data = AddSSHKeyAgentResponse(
-                    **json.loads(await response.text())
-                )
-                if len(response_data.error_log) > 0:
-                    # Errors occurred
-                    warning_text = "Some errors occurred during the addition of the SSH key, please check the logs above."
-                    if format:
-                        json_object = {"success": False, "message": response_data.error_log, "error_log": response_data.error_log}
-                        json_formatted_str = json.dumps(json_object, indent=2)
-                        rich.print(json_formatted_str)
-                    else:
-                        err_console.print(f"[red]Error log:\n{response_data.error_log}")
-                        rich.print(f"[yellow]{warning_text}")
-                    raise typer.Exit(1)
-                else:
-                    if format:
-                        json_object = {"success": True, "message": "SSH key successfully added"}
-                        json_formatted_str = json.dumps(json_object, indent=2)
-                        rich.print(json_formatted_str)
-                    else:
-                        rich.print("[green]SSH key successfully added")
-            else:
-                try:
-                    error_message = (await response.json()).get(
-                        "detail", "An unknown error happened."
-                    )
-                except ContentTypeError:
-                    error_message = await response.text()
-                if format:
-                    json_object = {"success": False, "message": f"Request failed: {error_message}"}
-                    json_formatted_str = json.dumps(json_object, indent=2)
-                    rich.print(json_formatted_str)
-                else:
-                    err_console.print(f"[red]Request failed: {error_message}")
