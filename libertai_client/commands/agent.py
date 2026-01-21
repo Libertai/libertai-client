@@ -123,7 +123,7 @@ async def deploy(
 
             if len(error_log) > 0:
                 # Errors occurred
-                err_console.print(f"[red]Error log:\n{error_log}")
+                err_console.print(f"[red]Error log:\n{error_log.decode()}")
                 warning_text = "Some errors occurred during the deployment, please check the logs above and make sure your agent is running correctly. If not, try to redeploy it and contact the LibertAI team if the issue persists."
                 rich.print(f"[yellow]{warning_text}")
             else:
