@@ -18,13 +18,13 @@ classifiers = [
 libertai = "libertai_client.main:app"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.14"
 typer = "^0.12.5"
 python-dotenv = "^1.0.1"
 pathspec = "^0.12.1"
 pydantic = "^2.11.7"
 paramiko = "^3.5.1"
-aiohttp = "^3.12.14"
+aiohttp = "^3.13.3"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"
