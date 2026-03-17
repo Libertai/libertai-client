@@ -25,6 +25,11 @@ pathspec = "^0.12.1"
 pydantic = "^2.11.7"
 paramiko = "^3.5.1"
 aiohttp = "^3.13.3"
+httpx = "^0.28.0"
+eth-account = "^0.13.0"
+aleph-sdk-python = "^2.3.0"
+rich = "^13.0.0"
+libertai-x402 = "^0.1.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.11.1"
