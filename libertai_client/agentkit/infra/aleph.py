@@ -209,44 +209,21 @@ async def wait_for_instance(
     )
 
 
-async def get_credits_info(address: str) -> dict:
+async def get_credit_balance(address: str) -> float:
+    """Fetch credit balance in USD from Aleph API."""
     for base_url in ALEPH_API_URLS:
         try:
             async with ClientSession() as session:
                 async with session.get(
                     f"{base_url}/api/v0/addresses/{address}/balance"
-                ) as balance_resp:
-                    if not balance_resp.ok:
+                ) as resp:
+                    if not resp.ok:
                         continue
-                    balance_data = await balance_resp.json()
-                async with session.get(
-                    f"{base_url}/api/v0/costs",
-                    params={
-                        "include_details": "0",
-                        "include_size": "true",
-                        "address": address,
-                    },
-                ) as costs_resp:
-                    if not costs_resp.ok:
-                        continue
-                    costs_data = await costs_resp.json()
-
-            def to_usd(credits: float) -> float:
-                return credits / (10**ALEPH_CREDITS_DECIMALS)
-            balance_usd = to_usd(balance_data["credit_balance"])
-            cost_per_second_usd = to_usd(costs_data["summary"]["total_cost_credit"])
-            cost_per_day_usd = cost_per_second_usd * 86400
-            runway_days = (
-                balance_usd / cost_per_day_usd if cost_per_day_usd > 0 else None
-            )
-            return {
-                "balance_usd": balance_usd,
-                "cost_per_day_usd": cost_per_day_usd,
-                "runway_days": runway_days,
-            }
+                    data = await resp.json()
+            return data["credit_balance"] / (10**ALEPH_CREDITS_DECIMALS)
         except Exception:
             continue
-    raise RuntimeError("Failed to fetch credits info from all Aleph API endpoints")
+    raise RuntimeError("Failed to fetch credit balance from all Aleph API endpoints")
 
 
 async def buy_credits(
@@ -256,6 +233,7 @@ async def buy_credits(
     resp = await payment_client.post(
         f"{LIBERTAI_API_BASE}/libertai/aleph-credits",
         json={"address": address, "amount": amount},
+        timeout=60.0,
     )
     if resp.status_code >= 400 and resp.status_code != 402:
         raise RuntimeError(f"Buy credits failed: {resp.status_code} {resp.text}")

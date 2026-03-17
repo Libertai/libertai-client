@@ -1795,6 +1795,22 @@ dev = ["build (>=1.2.2,<1.3.0)", "eth-account (>=0.13.1)", "pyright (>=1.1.385,<
 docs = ["sphinx (>=8.1.3,<8.2.0)", "sphinx-autobuild (>=2024.10.3,<2024.11.0)", "sphinx-rtd-theme (>=3.0.1,<3.1.0)"]
 
 [[package]]
+name = "libertai-x402"
+version = "0.1.0"
+description = "x402 utils to use LibertAI services"
+optional = false
+python-versions = "<3.14,>=3.11"
+groups = ["main"]
+files = [
+    {file = "libertai_x402-0.1.0-py3-none-any.whl", hash = "sha256:20928a1cbb4396c3f2fc4d435cda49ff199c64caa48526933a4daf5e9ef15e0c"},
+    {file = "libertai_x402-0.1.0.tar.gz", hash = "sha256:758ff2a938ac8bc46f2d7a3a2f3ff93657fe0288ea8c1271f8eafe553ed6bd77"},
+]
+
+[package.dependencies]
+eth-account = ">=0.13.0"
+httpx = ">=0.27.0"
+
+[[package]]
 name = "libusb1"
 version = "3.3.1"
 description = "Pure-python wrapper for libusb-1.0"
@@ -3741,4 +3757,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "f8b9ebd707e6d004457b01cdd6c7e805b7d1821275658a88ed8a72a651348176"
+content-hash = "1c7234e2426b76dc3d5ab7acf08e95ec09f6f8492a75312ed983c8feb62286f8"

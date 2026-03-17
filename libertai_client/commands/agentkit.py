@@ -17,6 +17,7 @@ from libertai_client.agentkit.infra.aleph import (
     create_instance,
     delete_existing_resources,
     get_aleph_account,
+    get_credit_balance,
     get_user_ssh_pubkey,
     notify_allocation,
     wait_for_instance,
@@ -168,19 +169,29 @@ async def deploy(
             rprint(f"  [dim]USDC balance: {usdc_balance:.2f} — sufficient[/dim]")
         rprint()
 
-        # Step 5: Buy Aleph credits
+        # Step 5: Check / buy Aleph credits
         step += 1
-        rprint(f"[bold]Step {step}:[/bold] Buying Aleph credits...")
+        rprint(f"[bold]Step {step}:[/bold] Aleph credits...")
         rprint()
 
-        from libertai_x402 import create_payment_client
+        try:
+            balance_usd = await get_credit_balance(address)
+            rprint(f"  [dim]Current balance: ${balance_usd:.2f}[/dim]")
+        except Exception:
+            balance_usd = 0.0
+            rprint("  [dim]Could not fetch credit balance, will purchase[/dim]")
 
-        payment_client = create_payment_client(private_key)
-        result = await _run_step(
-            f"Buying ${credits_amount:.2f} of Aleph credits",
-            fn=lambda: buy_credits(payment_client, address, credits_amount),
-        )
-        rprint(f"  [dim]Credits purchased: {result}[/dim]")
+        if balance_usd < credits_amount:
+            from libertai_x402 import create_payment_client
+
+            payment_client = create_payment_client(private_key)
+            result = await _run_step(
+                f"Buying ${credits_amount:.2f} of Aleph credits",
+                fn=lambda: buy_credits(payment_client, address, credits_amount),
+            )
+            rprint(f"  [dim]Credits purchased: {result}[/dim]")
+        else:
+            rprint(f"  [dim]Balance ${balance_usd:.2f} — sufficient, skipping purchase[/dim]")
         rprint()
 
         # Step 6: Create Aleph Cloud instance
