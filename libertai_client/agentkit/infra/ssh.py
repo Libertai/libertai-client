@@ -14,7 +14,7 @@ from libertai_client.agentkit.infra.scripts import (
     INSTALL_NODE_SCRIPT,
 )
 
-AGENT_ZIP_BLACKLIST = [".git", ".idea", ".vscode"]
+AGENT_ZIP_BLACKLIST = [".git/**", ".idea/**", ".vscode/**"]
 AGENT_ZIP_WHITELIST = [".env", ".env.prod"]
 
 
@@ -62,8 +62,19 @@ def wait_for_ssh(
     deadline = time.time() + timeout
     last_error: Exception | None = None
     while time.time() < deadline:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        per_attempt = min(30.0, remaining)
         try:
-            client.connect(hostname=host, username="root", key_filename=key_path)
+            client.connect(
+                hostname=host,
+                username="root",
+                key_filename=key_path,
+                timeout=per_attempt,
+                banner_timeout=per_attempt,
+                auth_timeout=per_attempt,
+            )
             logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
             return client
         except Exception as e:

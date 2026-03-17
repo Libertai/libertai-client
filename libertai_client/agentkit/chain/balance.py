@@ -27,7 +27,15 @@ def get_usdc_balance(address: str) -> float:
         timeout=10.0,
     )
     resp.raise_for_status()
-    raw = int(resp.json()["result"], 16)
+    payload = resp.json()
+    if "error" in payload or "result" not in payload:
+        error = payload.get("error", {})
+        msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+        raise RuntimeError(f"Error fetching USDC balance: {msg or 'missing result in JSON-RPC response'}")
+    try:
+        raw = int(payload["result"], 16)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Error parsing USDC balance from JSON-RPC response") from exc
     return raw / (10**USDC_DECIMALS)
 
 

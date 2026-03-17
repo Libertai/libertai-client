@@ -31,7 +31,7 @@ from libertai_client.agentkit.infra.ssh import (
     wait_for_ssh,
 )
 from libertai_client.agentkit.ui import _fail, _run_step
-from libertai_client.utils.typer import AsyncTyper
+from libertai_client.utils.typer import AsyncTyper, validate_optional_file_path_argument
 
 app: AsyncTyper = AsyncTyper(name="agentkit", help="Deploy and manage AgentKit agents on Aleph Cloud")
 
@@ -50,6 +50,7 @@ async def deploy(
         None,
         "--ssh-key",
         help="Path to SSH public key file (default: auto-detect from ~/.ssh/)",
+        callback=validate_optional_file_path_argument,
     ),
     credits_amount: float = typer.Option(
         1.0,
@@ -107,9 +108,13 @@ async def deploy(
                     "\n".join(f"{k}={v}" for k, v in existing_env.items() if v) + "\n"
                 )
                 os.makedirs(path, exist_ok=True)
-                with open(env_path, "w") as f:
+                fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
                     f.write(env_content)
-                rprint(f"  [green]Saved to {env_path}[/green]")
+                rprint(
+                    f"  [green]Saved to {env_path}[/green] "
+                    "[yellow](contains wallet private key — keep secure)[/yellow]"
+                )
             except Exception as e:
                 _fail("Configuring agent environment", e)
             rprint()
@@ -187,6 +192,14 @@ async def deploy(
             ssh_pubkey = ssh_pubkey_path.expanduser().read_text().strip()
         else:
             ssh_pubkey = get_user_ssh_pubkey()
+
+        if not ssh_pubkey:
+            _fail(
+                "Resolving SSH public key",
+                RuntimeError(
+                    "No SSH public key found. Use --ssh-key or generate one (e.g. ssh-keygen)"
+                ),
+            )
 
         instance_msg = await _run_step(
             "Creating Aleph instance",

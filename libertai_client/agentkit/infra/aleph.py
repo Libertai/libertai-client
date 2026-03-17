@@ -181,7 +181,17 @@ async def fetch_instance_ip(crn: CRNInfo, instance_hash: str) -> str:
             executions = await resp.json()
             if instance_hash not in executions:
                 return ""
-            interface = IPv6Interface(executions[instance_hash]["networking"]["ipv6"])
+            try:
+                networking = executions[instance_hash].get("networking", {})
+            except AttributeError:
+                return ""
+            ipv6_value = networking.get("ipv6")
+            if not ipv6_value:
+                return ""
+            try:
+                interface = IPv6Interface(ipv6_value)
+            except ValueError:
+                return ""
             return str(interface.ip + 1)
 
 
