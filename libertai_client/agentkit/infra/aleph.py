@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from ipaddress import IPv6Interface
+from pathlib import Path
 from typing import Any
 
 from aiohttp import ClientSession
@@ -32,7 +33,7 @@ from libertai_client.agentkit.chain.constants import (
     LIBERTAI_API_BASE,
 )
 
-ALEPH_API_URL = "https://api2.aleph.im"
+ALEPH_API_URL = ALEPH_API_URLS[0]
 ALEPH_CHANNEL = "libertai-agentkit"
 
 PATH_EXECUTIONS_LIST = "/about/executions/list"
@@ -59,8 +60,6 @@ def get_aleph_account(private_key: str) -> ETHAccount:
 
 
 def get_user_ssh_pubkey() -> str | None:
-    from pathlib import Path
-
     ssh_dir = Path.home() / ".ssh"
     for name in ["id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"]:
         path = ssh_dir / name

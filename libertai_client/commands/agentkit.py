@@ -4,6 +4,8 @@ from pathlib import Path
 
 import paramiko
 import typer
+from dotenv import dotenv_values
+from libertai_x402 import create_payment_client
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
@@ -23,10 +25,9 @@ from libertai_client.agentkit.infra.aleph import (
     wait_for_instance,
 )
 from libertai_client.agentkit.infra.ssh import (
-    configure_service,
     deploy_code,
-    install_deps,
-    install_node,
+    install_docker,
+    start_agent,
     upload_agent,
     verify_service,
     wait_for_ssh,
@@ -70,6 +71,17 @@ async def deploy(
     path = path.resolve()
     env_path = path / ".env.prod"
 
+    if not register_only:
+        compose_file = path / "docker-compose.yml"
+        if not compose_file.exists():
+            compose_file = path / "docker-compose.yaml"
+        if not compose_file.exists():
+            rprint(
+                "[red]No docker-compose.yml found in agent directory. "
+                "A docker-compose.yml is required for deployment.[/red]"
+            )
+            raise typer.Exit(1)
+
     console.rule("[bold blue]LibertAI AgentKit Deployment")
     rprint()
 
@@ -101,8 +113,6 @@ async def deploy(
             try:
                 existing_env: dict[str, str | None] = {}
                 if env_path.exists():
-                    from dotenv import dotenv_values
-
                     existing_env = dict(dotenv_values(env_path))
                 existing_env.update(env_vars)
                 env_content = (
@@ -163,7 +173,9 @@ async def deploy(
                 )
             )
             rprint()
-            usdc_balance = wait_for_usdc_funding(address, min_amount=MIN_USDC_FUNDING)
+            usdc_balance = await asyncio.to_thread(
+                wait_for_usdc_funding, address, MIN_USDC_FUNDING
+            )
             rprint(f"  [green]Received {usdc_balance:.2f} USDC[/green]")
         else:
             rprint(f"  [dim]USDC balance: {usdc_balance:.2f} — sufficient[/dim]")
@@ -182,8 +194,6 @@ async def deploy(
             rprint("  [dim]Could not fetch credit balance, will purchase[/dim]")
 
         if balance_usd < credits_amount:
-            from libertai_x402 import create_payment_client
-
             payment_client = create_payment_client(private_key)
             result = await _run_step(
                 f"Buying ${credits_amount:.2f} of Aleph credits",
@@ -270,20 +280,16 @@ async def deploy(
             fn=lambda: asyncio.to_thread(upload_agent, client, path),
         )
         await _run_step(
-            "Installing Node.js",
-            fn=lambda: asyncio.to_thread(install_node, client),
-        )
-        await _run_step(
             "Deploying agent code",
             fn=lambda: asyncio.to_thread(deploy_code, client),
         )
         await _run_step(
-            "Installing dependencies",
-            fn=lambda: asyncio.to_thread(install_deps, client),
+            "Installing Docker",
+            fn=lambda: asyncio.to_thread(install_docker, client),
         )
         await _run_step(
-            "Configuring agent service",
-            fn=lambda: asyncio.to_thread(configure_service, client),
+            "Starting agent",
+            fn=lambda: asyncio.to_thread(start_agent, client),
         )
 
         is_active = await _run_step(
@@ -309,7 +315,7 @@ async def deploy(
                 f"[bold]Instance IP:[/bold]      {instance_ip}\n"
                 f"[bold]Instance Hash:[/bold]    {instance_hash}\n"
                 f"[bold]Network:[/bold]          Base Mainnet\n"
-                f"[bold]Service:[/bold]          [green]libertai-agentkit (active)[/green]",
+                f"[bold]Service:[/bold]          [green]Docker (running)[/green]",
                 title="[bold green]LibertAI AgentKit Agent[/bold green]",
                 border_style="green",
             )

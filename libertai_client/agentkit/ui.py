@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -9,7 +9,7 @@ from rich.status import Status
 console = Console()
 
 
-def _fail(label: str, error: Exception) -> None:
+def _fail(label: str, error: Exception) -> NoReturn:
     console.print(f"  [red]✘[/red] {label}")
     console.print(f"    [red]{type(error).__name__}: {error or repr(error)}[/red]")
     raise typer.Exit(1)

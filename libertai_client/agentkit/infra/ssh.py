@@ -1,20 +1,19 @@
 import os
+import tarfile
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 import paramiko
 from pathspec import PathSpec
 
 from libertai_client.agentkit.infra.scripts import (
-    CONFIGURE_SERVICE_SCRIPT,
     DEPLOY_CODE_SCRIPT,
-    INSTALL_DEPS_SCRIPT,
-    INSTALL_NODE_SCRIPT,
+    INSTALL_DOCKER_SCRIPT,
+    START_AGENT_SCRIPT,
 )
 
-AGENT_ZIP_BLACKLIST = [".git/**", ".idea/**", ".vscode/**"]
+AGENT_ZIP_BLACKLIST = [".git/**", ".idea/**", ".vscode/**", "__pycache__/**", ".venv/**", "node_modules/**"]
 AGENT_ZIP_WHITELIST = [".env", ".env.prod"]
 
 
@@ -35,11 +34,10 @@ def _auto_detect_ssh_key() -> str:
 
 
 def _run_script(client: paramiko.SSHClient, script: str, label: str) -> None:
-    sftp = client.open_sftp()
     remote_path = f"/tmp/libertai-agentkit-{label}.sh"
-    with sftp.file(remote_path, "w") as f:
-        f.write(script)
-    sftp.close()
+    with client.open_sftp() as sftp:
+        with sftp.file(remote_path, "w") as f:
+            f.write(script)
     _stdin, stdout, stderr = client.exec_command(f"bash {remote_path}")
     exit_status = stdout.channel.recv_exit_status()
     if exit_status != 0:
@@ -93,42 +91,41 @@ def upload_agent(client: paramiko.SSHClient, agent_path: Path) -> None:
     else:
         patterns = []
     spec = PathSpec.from_lines("gitwildmatch", patterns + AGENT_ZIP_BLACKLIST)
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = tmp.name
     try:
-        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        with tarfile.open(tmp_path, "w:gz") as tf:
             for root, _, files in os.walk(agent_path):
                 for fname in files:
                     full = os.path.join(root, fname)
                     rel = os.path.relpath(full, agent_path)
                     if not spec.match_file(rel) or rel in AGENT_ZIP_WHITELIST:
-                        zf.write(full, arcname=rel)
+                        tf.add(full, arcname=rel)
         sftp = client.open_sftp()
-        sftp.put(tmp_path, "/tmp/libertai-agentkit.zip")
+        sftp.put(tmp_path, "/tmp/libertai-agentkit.tar.gz")
         sftp.close()
     finally:
         os.unlink(tmp_path)
-
-
-def install_node(client: paramiko.SSHClient) -> None:
-    _run_script(client, INSTALL_NODE_SCRIPT, "install-node")
 
 
 def deploy_code(client: paramiko.SSHClient) -> None:
     _run_script(client, DEPLOY_CODE_SCRIPT, "deploy-code")
 
 
-def install_deps(client: paramiko.SSHClient) -> None:
-    _run_script(client, INSTALL_DEPS_SCRIPT, "install-deps")
+def install_docker(client: paramiko.SSHClient) -> None:
+    _run_script(client, INSTALL_DOCKER_SCRIPT, "install-docker")
 
 
-def configure_service(client: paramiko.SSHClient) -> None:
-    _run_script(client, CONFIGURE_SERVICE_SCRIPT, "configure-service")
+def start_agent(client: paramiko.SSHClient) -> None:
+    _run_script(client, START_AGENT_SCRIPT, "start-agent")
 
 
 def verify_service(client: paramiko.SSHClient) -> bool:
     _stdin, stdout, _stderr = client.exec_command(
-        "systemctl is-active libertai-agentkit"
+        "cd /opt/libertai-agentkit && docker compose ps --format json"
     )
+    output = stdout.read().strip()
     stdout.channel.recv_exit_status()
-    return stdout.read().strip() == b"active"
+    if not output:
+        return False
+    return b'"running"' in output
