@@ -1,11 +1,12 @@
 import asyncio
+import math
 import os
 from pathlib import Path
 
 import paramiko
 import typer
 from dotenv import dotenv_values
-from libertai_x402 import create_payment_client
+from libertai_x402 import PaymentPolicy, create_payment_client
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
@@ -194,7 +195,11 @@ async def deploy(
             rprint("  [dim]Could not fetch credit balance, will purchase[/dim]")
 
         if balance_usd < credits_amount:
-            payment_client = create_payment_client(private_key)
+            # Cap the signed payment at the purchase amount (USDC, 6 decimals).
+            payment_client = create_payment_client(
+                private_key,
+                policy=PaymentPolicy(max_amount=math.ceil(credits_amount * 1_000_000)),
+            )
             result = await _run_step(
                 f"Buying ${credits_amount:.2f} of Aleph credits",
                 fn=lambda: buy_credits(payment_client, address, credits_amount),
